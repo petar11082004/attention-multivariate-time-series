@@ -38,13 +38,18 @@ not only clean-test accuracy.
 3. Hybrid convolutional stem versus direct tokenisation.
 4. Temporal downsampling factor in the hybrid.
 
-## Important validity gate
+## Validation split: known simplification
 
-The dataset description states that the official split is participant-based. Before modelling,
-we must establish reliable participant identifiers or a defensible reconstruction of training
-participant groups. If the archive files do not retain this information, we will obtain it from
-the original data source or revise the validation design; we will not silently use random
-trial-level validation.
+The official split is participant-based (10 training participants), but the UEA archive does not
+retain per-trial participant IDs, and recovering them exactly would require re-downloading the
+original Kaggle competition source data. Since the goal of this project is architecture practice
+rather than a publishable result, we accept this limitation explicitly rather than blocking on it:
 
-The project code enforces this policy: grouped-validation utilities require an explicit,
-one-identifier-per-trial group array and raise an error when it is absent.
+- Internal train/validation splitting uses a stratified random split of the official training
+  partition (fixed seed, same split reused across models for a fair comparison).
+- This almost certainly understates the true generalisation gap, because trials from the same
+  participant can land in both the internal train and validation folds. Validation accuracy should
+  therefore be read as optimistic relative to the untouched official test set.
+- The official test set (held-out participants) is still the only number we trust for the
+  headline comparison between architectures, and it is still never used for model or
+  hyperparameter selection.

@@ -45,11 +45,14 @@ See [docs/experiment-plan.md](docs/experiment-plan.md) for the full research pro
 
 ## Setup and first inspection
 
-Install Python 3.10+ and create a virtual environment, then install the project:
+Install Python 3.10+ and create a virtual environment. This project lives inside a deeply
+nested OneDrive path, and `torch`'s installed files include long third-party license paths
+that exceed Windows' 260-character `MAX_PATH` when combined with an in-project `.venv/` here
+— so the virtual environment is created outside OneDrive instead:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+py -m venv C:\Users\petar\venvs\attention-mts
+C:\Users\petar\venvs\attention-mts\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 python -m attention_mts.inspect --download
