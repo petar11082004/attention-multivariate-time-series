@@ -11,7 +11,13 @@ from torch import nn
 
 from attention_mts.data import ChannelStandardiser, load_split
 from attention_mts.metrics import compute_classification_metrics, count_parameters
-from attention_mts.models import BiLSTMBaseline, CNNBaseline, PooledLinearBaseline, TransformerClassifier
+from attention_mts.models import (
+    BiLSTMBaseline,
+    CNNBaseline,
+    CNNTransformerHybrid,
+    PooledLinearBaseline,
+    TransformerClassifier,
+)
 from attention_mts.splits import stratified_train_val_split
 
 
@@ -26,6 +32,10 @@ MODEL_FACTORIES: dict[str, ModelFactory] = {
     n_channels=n_channels, d_model=96, n_heads=4, d_ff=192, n_layers=2, dropout=0.1
 ),
     "bilstm": lambda n_channels: BiLSTMBaseline(n_channels=n_channels, hidden_size=96),
+    "hybrid": lambda n_channels: CNNTransformerHybrid(
+        n_channels=n_channels, n_mid=32, d_model=96, n_heads=4, d_ff=192, n_layers=2,
+        kernel_size=7, downsample_factor=2, dropout=0.1,
+    ),
 }
 
 

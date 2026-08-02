@@ -85,4 +85,33 @@ class BiLSTMBaseline(nn.Module):
         outputs, _ = self.lstm(x)         # outputs: (batch, time, hidden_size*2)
         pooled = outputs.mean(dim=1)
         return self.classifier(pooled)
+
+class CNNTransformerHybrid(nn.Module):
+    def __init__(
+            self, n_channels: int, n_mid: int, d_model: int, n_heads: int, d_ff: int, n_layers: int,
+            kernel_size: int = 7, downsample_factor: int = 2, dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        self.project = nn.Conv1d(n_channels, n_mid, kernel_size=1)
+        self.downsample = nn.Sequential(
+            nn.Conv1d(n_mid, d_model, kernel_size, stride = downsample_factor, padding=kernel_size // 2),
+            nn.BatchNorm1d(d_model), nn.ReLU(),
+        )
+        self.pos_encoding = PositionalEncoding(d_model)
+        self.blocks = nn.ModuleList(
+            [TransformerEncoderBlock(d_model, n_heads, d_ff, dropout) for _ in range(n_layers)]
+        )
+        self.final_norm = nn.LayerNorm(d_model)
+        self.classifier = nn.Linear(d_model, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.project(x)          # (batch, n_mid, time)
+        x = self.downsample(x)       # (batchm d_model, time // downsample_factor)
+        x = x.transpose(1, 2)        # (batch, time', d_model) - tokens are now downsampled chunks
+        x = self.pos_encoding(x)
+        for block in self.blocks:
+            x = block(x)
+        x = self.final_norm(x)
+        pooled = x.mean(dim=1)
+        return self.classifier(pooled)
     

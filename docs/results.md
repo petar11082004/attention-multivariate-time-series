@@ -11,6 +11,7 @@ The official test set has not been touched.
 | Pooled linear baseline | 145 | 0.559 ± 0.003 | 0.578 ± 0.002 |
 | 1D CNN (uncorrected, see caveat) | 169,201 | 0.589 ± 0.020 | 0.657 ± 0.010 |
 | BiLSTM (uncorrected, see caveat) | 186,049 | 0.610 ± 0.011 | 0.660 ± 0.006 |
+| CNN-Transformer hybrid (uncorrected, see caveat) | 176,289 | 0.713 ± 0.010 | 0.791 ± 0.009 |
 | Transformer encoder (uncorrected, see caveat) | 163,777 | 0.731 ± 0.004 | 0.808 ± 0.006 |
 
 ## Transformer encoder
@@ -36,6 +37,31 @@ over both other uncorrected models (73.1% vs. 58.9% CNN vs. 55.9% baseline; AURO
 0.657 vs. 0.578), so the qualitative conclusion — attention provides a real, structural
 advantage on this task at matched parameter budget — holds regardless of exactly which epoch is
 reported.
+
+## CNN-Transformer hybrid
+
+Command: `python scripts/train.py --model hybrid`
+
+Architecture: `Conv1d` channel projection (`n_mid=32`) into a stride-2, `kernel_size=7` conv
+(`d_model=96`) that downsamples 62 time steps to 31, then `n_heads=4, d_ff=192, n_layers=2`
+Transformer encoder blocks over the downsampled sequence (see `CNNTransformerHybrid` in
+`src/attention_mts/models.py`).
+
+**Same known caveat as the other learned models — final-epoch, not best-checkpoint, result.**
+All 5 seeds overfit similarly: train loss falls toward ~0.01-0.07 by epoch 30 while val loss
+bottoms out around epoch 3-4 (e.g. seed 1's minimum is 0.545 at epoch 4) then climbs to
+1.4-1.7+ by epoch 30.
+
+This result directly answers one of the two required ablations from `experiment-plan.md`
+("hybrid convolutional stem vs. direct tokenisation"): the hybrid (71.3% / 0.791) comes close
+to but does not quite match the plain Transformer (73.1% / 0.808), despite attention here
+operating on only 31 downsampled tokens instead of 62 raw ones. So compressing time before
+attention costs a small amount of accuracy — the conv stem's downsampling discards some
+information direct attention over all 62 steps could use, and that outweighs the benefit of
+giving attention fewer, pre-aggregated tokens to work with, at least at `downsample_factor=2`
+and this parameter budget. At the same time, the hybrid still clearly beats the CNN (58.9%) and
+BiLSTM (61.0%) by a wide margin, so most of the benefit in this study is coming from attention
+existing at all, not from the specific way tokens are constructed before it.
 
 ## Attention visualization
 
