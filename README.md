@@ -30,18 +30,28 @@ X.shape == (n_examples, n_channels, n_time_steps)
 | Transformer encoder | Direct interactions among time points |
 | CNN-Transformer hybrid | Local features followed by global attention |
 
-All learned models will be matched as closely as practical for parameter count, optimiser,
-learning-rate schedule, augmentation, early-stopping rule, and training seeds.
+All learned models are matched for parameter count (~150k-250k trainable parameters), optimiser,
+and training seeds. Early stopping (best-checkpoint, `patience=10`) is implemented and used for
+the Transformer and hybrid; the CNN and BiLSTM were not re-run with it (see
+[docs/results.md](docs/results.md) for why) and remain final-epoch numbers.
 
 ## Evaluation rules
 
-1. The official test partition is never used for model or hyperparameter selection.
-2. Validation within the training partition must respect participant groups.
+1. The official test partition is never used for model or hyperparameter selection, and has not
+   been touched at all so far — every result to date is on the internal validation split.
+2. Validation within the training partition uses a stratified random split, **not** a
+   participant-grouped one. The official split is participant-based, but the archive doesn't
+   retain per-trial participant IDs; recovering them would require the original Kaggle
+   competition source. This is a deliberate, documented simplification for a practice project,
+   not an oversight — see
+   [experiment-plan.md](docs/experiment-plan.md#validation-split-known-simplification).
 3. Channel standardisation is fitted on the relevant training fold only.
-4. Results are reported across multiple seeds with accuracy, balanced accuracy, macro-F1,
-   AUROC, parameter count, and inference cost.
+4. Results are reported across multiple seeds with accuracy and AUROC (`src/attention_mts/metrics.py`
+   also computes balanced accuracy and macro-F1, and can measure inference latency, but only
+   accuracy/AUROC are currently surfaced in [docs/results.md](docs/results.md)).
 
-See [docs/experiment-plan.md](docs/experiment-plan.md) for the full research protocol.
+See [docs/experiment-plan.md](docs/experiment-plan.md) for the full research protocol and
+[docs/results.md](docs/results.md) for the actual results and their interpretation.
 
 ## Setup and first inspection
 
@@ -72,8 +82,16 @@ python -m pip install -e ".[train,dev]"
 
 ## Project milestones
 
-1. **Data audit** — download, inspect, and verify participant-aware validation metadata.
-2. **Shared training framework** — deterministic splits, preprocessing, metrics, and logging.
-3. **Controlled models** — baseline, CNN, BiLSTM, Transformer, and hybrid.
-4. **Robustness and ablations** — noise, masking, channel dropout, shifts, and architecture tests.
-5. **Portfolio report** — mathematics, experimental evidence, visualisations, and limitations.
+1. **Data audit** — done. See [docs/data-audit.md](docs/data-audit.md).
+2. **Shared training framework** — done: deterministic split, per-fold standardisation, shared
+   metrics, a generalized `scripts/train.py` with best-checkpoint early stopping.
+3. **Controlled models** — done: baseline, CNN, BiLSTM, Transformer, and hybrid all built,
+   trained, and compared. See [docs/results.md](docs/results.md). Self-attention (scaled
+   dot-product, multi-head, positional encoding, encoder blocks) is implemented from scratch in
+   `src/attention_mts/attention.py`; the CNN and LSTM use PyTorch's built-in layers, since they
+   were reference comparisons rather than the object of study.
+4. **Robustness and ablations** — not done. `docs/experiment-plan.md` specifies the intended
+   suite (noise, masking, channel dropout, shifts, positional-encoding/head-count/pre-vs-post-norm
+   ablations); descoped for this pass of the project rather than attempted and abandoned.
+5. **Portfolio report** — not done as a separate document; `docs/results.md` carries the
+   mathematics-to-evidence narrative built up through the project instead.

@@ -11,8 +11,8 @@ The official test set has not been touched.
 | Pooled linear baseline | 145 | 0.559 ± 0.003 | 0.578 ± 0.002 |
 | 1D CNN (uncorrected, see caveat) | 169,201 | 0.589 ± 0.020 | 0.657 ± 0.010 |
 | BiLSTM (uncorrected, see caveat) | 186,049 | 0.610 ± 0.011 | 0.660 ± 0.006 |
-| CNN-Transformer hybrid (uncorrected, see caveat) | 176,289 | 0.713 ± 0.010 | 0.791 ± 0.009 |
-| Transformer encoder (uncorrected, see caveat) | 163,777 | 0.731 ± 0.004 | 0.808 ± 0.006 |
+| CNN-Transformer hybrid (early-stopped) | 176,289 | 0.712 ± 0.014 | 0.794 ± 0.017 |
+| Transformer encoder (early-stopped) | 163,777 | 0.736 ± 0.009 | 0.817 ± 0.007 |
 
 ## Transformer encoder
 
@@ -22,21 +22,20 @@ Architecture: `d_model=96, n_heads=4, d_ff=192, n_layers=2, dropout=0.1`, pre-no
 sinusoidal positional encoding, mean pooling over time (see `src/attention_mts/attention.py`
 and the `TransformerClassifier` class in `src/attention_mts/models.py`).
 
-**Same known caveat as the CNN — final-epoch, not best-checkpoint, result.** All 5 seeds
-overfit: train loss collapses toward ~0.01-0.05 by epoch 30 while val loss bottoms out around
-epoch 3-5 (e.g. seed 0's minimum is 0.516 at epoch 4) and then climbs to 1.3-1.6+ by epoch 30.
+**Early-stopping caveat resolved.** `scripts/train.py` now tracks the best `val_loss` seen
+during training, saves that checkpoint, and stops after `patience=10` epochs without
+improvement (default `--epochs 100 --patience 10`). All 5 seeds stop at epoch 14, restoring the
+weights from their true best epoch (around epoch 4 in every case, e.g. seed 3's best is
+`val_loss=0.5253` at epoch 4). This raised the result slightly from the earlier uncorrected
+epoch-30 number (73.1% / 0.808) to **73.6% / 0.817** — confirming the fix wasn't just cosmetic,
+the final-epoch number really was leaving performance on the table.
 
-One nuance that makes this caveat less damaging than it sounds: unlike a simple picture of
-overfitting, val accuracy/AUROC stayed high even as val loss climbed. Binary cross-entropy
-punishes *confident* wrong predictions heavily, so a rising loss with a stable/high accuracy is
-consistent with the model becoming more overconfident on both its correct and incorrect
-predictions, rather than actually flipping more predictions to wrong. So the true early-stopped
-accuracy could be similar, or could differ in either direction — this hasn't been checked
-directly. What's not in question: this final-epoch number is already a wide, unambiguous margin
-over both other uncorrected models (73.1% vs. 58.9% CNN vs. 55.9% baseline; AUROC 0.808 vs.
-0.657 vs. 0.578), so the qualitative conclusion — attention provides a real, structural
-advantage on this task at matched parameter budget — holds regardless of exactly which epoch is
-reported.
+This final-epoch number is a wide, unambiguous margin over the CNN and BiLSTM (which remain
+uncorrected — see their sections below; not re-run with early stopping, since the project's
+scope was set at documenting the gap rather than re-running every model). The qualitative
+conclusion holds either way: attention provides a real, structural advantage on this task at a
+matched parameter budget, and the corrected number if anything strengthens rather than weakens
+that conclusion.
 
 ## CNN-Transformer hybrid
 
@@ -47,16 +46,18 @@ Architecture: `Conv1d` channel projection (`n_mid=32`) into a stride-2, `kernel_
 Transformer encoder blocks over the downsampled sequence (see `CNNTransformerHybrid` in
 `src/attention_mts/models.py`).
 
-**Same known caveat as the other learned models — final-epoch, not best-checkpoint, result.**
-All 5 seeds overfit similarly: train loss falls toward ~0.01-0.07 by epoch 30 while val loss
-bottoms out around epoch 3-4 (e.g. seed 1's minimum is 0.545 at epoch 4) then climbs to
-1.4-1.7+ by epoch 30.
+**Early-stopped, same as the Transformer.** All 5 seeds stop at epoch 13, restoring the best
+checkpoint (around epoch 3-4 in every case, e.g. seed 1's best is `val_loss=0.5450` at epoch
+4). Unlike the Transformer, correcting this barely moved the result (71.3%/0.791 uncorrected →
+71.2%/0.794 corrected) — the hybrid's early-epoch and final-epoch trajectories were already
+similar enough that final-epoch reporting wasn't hiding much here.
 
 This result directly answers one of the two required ablations from `experiment-plan.md`
-("hybrid convolutional stem vs. direct tokenisation"): the hybrid (71.3% / 0.791) comes close
-to but does not quite match the plain Transformer (73.1% / 0.808), despite attention here
-operating on only 31 downsampled tokens instead of 62 raw ones. So compressing time before
-attention costs a small amount of accuracy — the conv stem's downsampling discards some
+("hybrid convolutional stem vs. direct tokenisation"): the hybrid (71.2% / 0.794) comes close
+to but does not quite match the plain Transformer (73.6% / 0.817), despite attention here
+operating on only 31 downsampled tokens instead of 62 raw ones — and this gap holds up under
+the fair, best-checkpoint comparison, not just the earlier uncorrected one. So compressing time
+before attention costs a small amount of accuracy — the conv stem's downsampling discards some
 information direct attention over all 62 steps could use, and that outweighs the benefit of
 giving attention fewer, pre-aggregated tokens to work with, at least at `downsample_factor=2`
 and this parameter budget. At the same time, the hybrid still clearly beats the CNN (58.9%) and
@@ -132,9 +133,12 @@ severe overfitting: train loss collapses to near-zero (e.g. seed 0: 0.028, seed 
 val loss bottoms out around epoch 4-7 (e.g. seed 0's minimum is 0.678 at epoch 4) and then
 climbs steadily to 1.5-3.0+ by epoch 30. The reported numbers above are therefore measuring an
 overfit model, not this architecture's best achievable validation performance — the true number
-is likely somewhat higher. Fixing this requires adding best-checkpoint early stopping to
-`scripts/train.py` (tracked as follow-up work, not yet implemented — deprioritised in favour of
-moving on to the Transformer, which is the actual point of this project).
+is likely somewhat higher. `scripts/train.py` gained best-checkpoint early stopping later (see
+the Transformer/hybrid sections above), but this model was not re-run with it: the two learned
+temporal models that don't use attention (this one and the BiLSTM) were already well behind the
+attention-based models on the uncorrected numbers, and re-running them wasn't judged worth the
+time against the project's actual question. A corrected number would likely be somewhat higher
+but is very unlikely to close a ~15-point AUROC gap.
 
 Even with that caveat, the qualitative comparison to the baseline is informative: within just 2
 epochs the CNN already matched the baseline's fully-converged accuracy, and its AUROC (0.657)

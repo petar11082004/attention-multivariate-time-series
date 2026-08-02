@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from typing import Callable
 
 import numpy as np
@@ -59,7 +60,7 @@ def prepare_data():
     return to_tensor(X_train, y_train_full[train_idx]), to_tensor(X_val, y_train_full[val_idx])
 
 
-def train_one_seed(model_name: str, seed: int, data, epochs: int, lr: float, batch_size: int) -> dict:
+def train_one_seed(model_name: str, seed: int, data, epochs: int, lr: float, batch_size: int, patience: int) -> dict:
     set_seed(seed)
     (X_train_t, y_train_t), (X_val_t, y_val_t) = data
 
@@ -68,6 +69,10 @@ def train_one_seed(model_name: str, seed: int, data, epochs: int, lr: float, bat
     loss_fn = nn.BCEWithLogitsLoss()
 
     n_train = X_train_t.shape[0]
+    best_val_loss = float("inf")
+    best_state = None
+    epochs_without_improvement = 0
+
     for epoch in range(epochs):
         model.train()
         permutation = torch.randperm(n_train)
@@ -88,25 +93,41 @@ def train_one_seed(model_name: str, seed: int, data, epochs: int, lr: float, bat
             val_loss = loss_fn(model(X_val_t).squeeze(-1), y_val_t).item()
         print(f"model={model_name} seed={seed} epoch={epoch + 1:02d} "
               f"train_loss={epoch_loss / n_train:.4f} val_loss={val_loss:.4f}")
-        
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_state = copy.deepcopy(model.state_dict())
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= patience:
+                print(f"model = {model_name} seed = {seed} early stop at epoch={epoch + 1:02d} "
+                f"(best val_loss={best_val_loss:.4f})")
+                break
+
+    model.load_state_dict(best_state)        
     model.eval()
     with torch.no_grad():
         val_prob = torch.sigmoid(model(X_val_t).squeeze(-1)).numpy()
     metrics = compute_classification_metrics(y_val_t.numpy(), val_prob)
-    return {"model": model_name, "seed": seed, "params": count_parameters(model), **metrics.as_dict()}
+    return {
+        "model": model_name, "seed": seed, "params": count_parameters(model),
+        "best_val_loss": best_val_loss, **metrics.as_dict(),
+    }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=sorted(MODEL_FACTORIES), default="baseline")
-    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    parser.add_argument("--patience", type=int, default=10)
     args = parser.parse_args()
 
     data = prepare_data()
-    results = [train_one_seed(args.model, s, data, args.epochs, args.lr, args.batch_size) for s in args.seeds]
+    results = [train_one_seed(args.model, s, data, args.epochs, args.lr, args.batch_size, args.patience) for s in args.seeds]
 
     accs = [r["accuracy"] for r in results]
     aurocs = [r["auroc"] for r in results]
