@@ -6,6 +6,27 @@ This is a PyTorch portfolio project that studies a narrow question carefully:
 > cross-subject MEG face-versus-scramble classification relative to convolutional and
 > recurrent models?
 
+## Result
+
+Yes, clearly. Five models were implemented from scratch in PyTorch and compared at a matched
+~150k-250k trainable-parameter budget:
+
+| Model | Val AUROC |
+| --- | --- |
+| Pooled linear baseline | 0.578 |
+| 1D CNN | 0.657 |
+| BiLSTM | 0.660 |
+| CNN-Transformer hybrid | 0.794 |
+| Transformer encoder | **0.817** |
+
+Self-attention (scaled dot-product, multi-head, sinusoidal positional encoding, pre-norm
+encoder blocks) is implemented from scratch in
+[src/attention_mts/attention.py](src/attention_mts/attention.py). Local convolution and
+recurrence both plateau around the same modest ceiling regardless of mechanism; any model with
+direct pairwise attention clears it by a wide margin. Full results, per-model architecture
+details, and an attention-weight visualization are in
+[docs/results.md](docs/results.md).
+
 ## Dataset: UEA FaceDetection
 
 Each example is a 1.5-second MEG recording made while a participant viewed either a face or
@@ -80,18 +101,24 @@ When we begin neural-model implementation, install the training dependency expli
 python -m pip install -e ".[train,dev]"
 ```
 
-## Project milestones
+## What this project covers
 
-1. **Data audit** — done. See [docs/data-audit.md](docs/data-audit.md).
-2. **Shared training framework** — done: deterministic split, per-fold standardisation, shared
-   metrics, a generalized `scripts/train.py` with best-checkpoint early stopping.
-3. **Controlled models** — done: baseline, CNN, BiLSTM, Transformer, and hybrid all built,
-   trained, and compared. See [docs/results.md](docs/results.md). Self-attention (scaled
-   dot-product, multi-head, positional encoding, encoder blocks) is implemented from scratch in
-   `src/attention_mts/attention.py`; the CNN and LSTM use PyTorch's built-in layers, since they
-   were reference comparisons rather than the object of study.
-4. **Robustness and ablations** — not done. `docs/experiment-plan.md` specifies the intended
-   suite (noise, masking, channel dropout, shifts, positional-encoding/head-count/pre-vs-post-norm
-   ablations); descoped for this pass of the project rather than attempted and abandoned.
-5. **Portfolio report** — not done as a separate document; `docs/results.md` carries the
-   mathematics-to-evidence narrative built up through the project instead.
+- **Data audit** — downloaded, inspected, and validated the public archive before writing any
+  model code. See [docs/data-audit.md](docs/data-audit.md).
+- **A shared training framework** — deterministic split, per-fold standardisation, shared
+  metrics, and a single generalized `scripts/train.py` (best-checkpoint early stopping, any
+  registered model) that all five architectures below train through.
+- **Five models, matched and compared** — a pooled-linear baseline, 1D CNN, BiLSTM, Transformer
+  encoder, and CNN-Transformer hybrid, each solved for a comparable parameter budget and
+  compared under the same split, optimiser, and seeds. Self-attention is implemented from
+  scratch; the CNN and LSTM use PyTorch's built-in layers, since they were the reference
+  comparisons, not the object of study. Full results and interpretation:
+  [docs/results.md](docs/results.md).
+- **An attention-weight visualization** confirming what the trained Transformer actually
+  attends to over time, not just its accuracy — see the same results doc.
+
+**Natural next steps, not pursued here:** the robustness/ablation suite specified in
+[docs/experiment-plan.md](docs/experiment-plan.md) (input noise, channel dropout, positional-encoding
+and head-count ablations) and evaluation on the held-out test set. The project's scope was set
+at answering the headline question above with a clean, well-diagnosed comparison — which it
+does — rather than a full research-grade study.
